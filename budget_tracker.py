@@ -95,64 +95,93 @@ def analyze_and_run_command( lines ):
             return
         print( act_user_data["last-login"] )
     elif first_command.lower() == "balance":
-        # Showing the balance following the limit spend, highest, lowest and total spending in this month
+        # Showing the balance following the limit spend, highest, lowest, and total spending in this month
         if act_user_data == None or UserName == "":
             print("You need to login")
             return
         print( f"Your Balance: RM {act_user_data["value"]}" )
         print( f"Your Limit Spend: RM {act_user_data["value_tracker"]}")
-        cdate = ""
-        cmin_date = ""
-        cmax_date = ""
+        ts_array = act_user_data["transaction"]
+        cdate = ts_array[0][0]
         total = 0
+        ttspend = 0
+        ttearn = 0
         total_spend = 0
-        min_balance = 0
-        max_balance = 0
-        length = len(act_user_data["transaction"])
+        total_earn = 0
+        length = len(ts_array)
+        list_array = []
 
+        # Calculate the total income,spending each day
         for i in range(0, length):
-            transaction = act_user_data["transaction"][i]
-            if cdate != transaction[0] or i == length - 1:
-                cdate = transaction[0]
-                if max_balance < total:
-                    max_balance = total
-                    cmax_date = cdate
-                if min_balance > total:
-                    min_balance = total
-                    cmin_date = cdate
-                total = 0
-            if transaction[2] == False:
-                total += abs( transaction[3] )
-                total_spend += abs( transaction[3] )
-
-        print(f"The Highest Spend {cmax_date}: RM {max_balance} ")
-        print(f"The Lowest Spend {cmin_date}: RM {min_balance} ")
-        print(f"The Total Spend in this Month: RM {total_spend}")
+            ts = ts_array[i]
+            if cdate != ts[0] or i == length - 1:
+                list_array.append((cdate, ttearn, ttspend))
+                ttearn = 0
+                ttspend = 0
+                cdate = ts[0]
+            
+            if ts[2]:   # It is income
+                ttearn += abs( ts[3] )
+                total_earn += abs( ts[3] )
+            else:
+                ttspend += abs( ts[3] )
+                total_spend += abs( ts[3] )
+            
+        highSpendIdx = 0
+        lowSpendIdx = 0
+        highEarnIdx = 0
+        lowEarnIdx = 0
+        # Determine the highest and lowest value
+        for i in range(0, len(list_array)):
+            if list_array[i][2] > list_array[highSpendIdx][2]:
+                highSpendIdx = i
+            if list_array[i][2] < list_array[lowSpendIdx][2]:
+                lowSpendIdx = i
+            if list_array[i][1] > list_array[highEarnIdx][1]:
+                highEarnIdx = i
+            if list_array[i][1] < list_array[lowEarnIdx][1]:
+                lowEarnIdx = i
+        print(f"The Highest Spend {list_array[highSpendIdx][0]}: RM {list_array[highSpendIdx][2]} ")
+        print(f"The Lowest Spend {list_array[lowSpendIdx][0]}: RM {list_array[lowSpendIdx][2]} ")
+        print(f"The Highest Earn {list_array[highEarnIdx][0]}: RM {list_array[highEarnIdx][1]} ")
+        print(f"The Lowest Earn {list_array[lowEarnIdx][0]}: RM {list_array[lowEarnIdx][1]} ")
+        print(f"The Total Spend: RM {total_spend}")
+        print(f"The Total Earn: RM {total_earn}")
     elif first_command.lower() == "list-transaction" or first_command.lower() == "list":
         # Showing the list of Transaction
         if act_user_data == None or UserName == "":
             print("You need to login")
             return
-        cdate = ""
+        ts_array = act_user_data["transaction"]
+        length = len(ts_array)
+        cdate = ts_array[0][0]
         total = 0
-        length = len(act_user_data["transaction"])
+
+        # Determine the total spending on specific days is out of spending
         for i in range(0, length):
-            transaction = act_user_data["transaction"][i]
-            if cdate != transaction[0] or i == length - 1:
-                print("Change")
-                cdate = transaction[0]
+            transaction = ts_array[i]
+            if cdate != transaction[0]:
                 if total > act_user_data["value_tracker"]:
-                    print(f"{transaction[0]}: RM { total } ( Out of Spending )")
+                    print(f"{cdate}: RM { total } ( Out of Spending )")
                 else:
-                    print(f"{transaction[0]}: RM { total } ")
+                    print(f"{cdate}: RM { total } ")
+                cdate = transaction[0]
                 total = 0
+
             if transaction[2] == False:
                 total += abs( transaction[3] )
 
+            if i == length - 1:
+                if total > act_user_data["value_tracker"]:
+                    print(f"{cdate}: RM { total } ( Out of Spending )")
+                else:
+                    print(f"{cdate}: RM { total } ")
+
         print("\n======== List of Transaction ========")
+        # Displaying list of transaction that user add
         for i in range(0, len(act_user_data["transaction"])):
             transaction = act_user_data["transaction"][i]
-            print(f"{i}| {transaction[0]}, {transaction[1]} {transaction[3]}")
+            print(f"{i}| {transaction[0]}, {transaction[1]}\tRM{transaction[3]}")
     elif first_command.lower() == "logout":
         # Log out current account
         if act_user_data == None or UserName == "":
@@ -185,9 +214,9 @@ def analyze_and_run_command( lines ):
                 value = -value
             act_user_data["transaction"].append([date, trans_title, income_or_pay, value])
         elif len(lines) == 2 and lines[1] == "delete":
-            index_delete = input("Enter the Index of Transaction: ")
-            act_user_data["value"] -= act_user_data["transaction"][3]
-            act_user_data["transaction"].remove( index_delete )
+            index_delete = int(input("Enter the Index of Transaction: "))
+            act_user_data["value"] -= float(act_user_data["transaction"][index_delete][3])
+            act_user_data["transaction"].pop( index_delete )
         else:
             print("Invalid Arguments")
     elif first_command == "budget":
@@ -196,7 +225,7 @@ def analyze_and_run_command( lines ):
 
         if len( lines ) > 0:
             if lines[1] == "set":
-                act_user_data["value_tracker"] = int(input("Enter the maximum value to spend per day: RM "))
+                act_user_data["value_tracker"] = float(input("Enter the maximum value to spend per day: RM "))
         
     elif first_command == "help":
         help_print()
